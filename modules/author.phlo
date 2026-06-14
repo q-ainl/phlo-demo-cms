@@ -1,0 +1,16 @@
+@ extends: entity
+
+static table = 'authors'
+static order = 'name ASC'
+
+view: $this->name
+
+static schema => arr (
+	id:      field (type: 'number',   title: 'ID', list: false, record: false),
+	name:    field (type: 'text',     title: 'Name', length: 80, required: true),
+	email:   field (type: 'email',    title: 'Email', length: 120),
+	avatar:  field (type: 'image',    title: 'Avatar', list: false),
+	bio:     field (type: 'text',     title: 'Bio', length: 600, multiline: true, list: false),
+	articles: field (type: 'child',   obj: 'article', title: 'Articles'),
+	created: field (type: 'datetime', title: 'Joined', list: false),
+)

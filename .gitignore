@@ -1,0 +1,17 @@
+# Compiled output
+php/
+www/*.css
+www/*.js
+www/icons.png
+
+# Runtime data (regenerate with: php www/app.php seed::run)
+data/cms.db
+data/errors.json
+data/uploads/
+
+# Dependencies
+data/vendor/
+
+# Local creds / env (never commit)
+creds.ini
+.env

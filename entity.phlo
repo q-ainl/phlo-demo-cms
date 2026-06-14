@@ -1,0 +1,6 @@
+@ extends: model
+
+// Every CMS model in this demo stores in one SQLite file, so the whole demo
+// is a single portable database you can copy and re-seed.
+static DB => %SQLite(data.'cms.db')
+static objValidate = true

@@ -1,0 +1,14 @@
+@ extends: entity
+
+static table = 'comments'
+static order = 'created DESC'
+
+view: $this->name
+
+static schema => arr (
+	id:         field (type: 'number',   title: 'ID', list: false, record: false),
+	article:    field (type: 'parent',   obj: 'article', title: 'Article', required: true),
+	name:       field (type: 'text',     title: 'Name', length: 80, required: true),
+	body:       field (type: 'text',     title: 'Comment', length: 1000),
+	created:    field (type: 'datetime', title: 'Posted', list: false),
+)
