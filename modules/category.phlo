@@ -6,7 +6,7 @@ static order = 'name ASC'
 view: $this->name
 
 static schema => arr (
-	id:       field (type: 'number', title: 'ID', list: false, record: false),
+	id:       field (type: 'number', title: 'ID', list: false, record: false, create: false, change: false),
 	name:     field (type: 'text',   title: 'Name', length: 60, required: true),
 	slug:     field (type: 'text',   title: 'Slug', length: 60),
 	articles: field (type: 'child',  obj: 'article', title: 'Articles'),

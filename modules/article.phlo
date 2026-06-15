@@ -5,15 +5,69 @@ static order = 'created DESC'
 
 view: $this->title
 
+prop wordCount => str_word_count(strip_tags((string)$this->body))
+
+static objFilters = [
+	'published' => ['title' => 'Published', 'filter' => "status = 'published'"],
+	'draft'     => ['title' => 'Drafts',    'filter' => "status = 'draft'"],
+	'featured'  => ['title' => 'Featured',  'filter' => 'featured = 1'],
+]
+
+static objSorts = [
+	'newest' => ['title' => 'Newest',    'order' => 'created DESC'],
+	'oldest' => ['title' => 'Oldest',    'order' => 'created ASC'],
+	'title'  => ['title' => 'Title A–Z', 'order' => 'title ASC'],
+]
+
+static objWidgets => [
+	'Articles' => obj (
+		type: 'gauge',
+		data: static::item(columns: 'COUNT(id)'),
+	),
+	'By status' => obj (
+		type: 'pie',
+		data: static::pair(columns: 'status, COUNT(id)', group: 'status'),
+	),
+	'Per category' => obj (
+		type: 'pie',
+		data: static::pair (
+			columns: 'categories.name, COUNT(articles.id)',
+			joins: 'LEFT JOIN categories ON categories.id = articles.category',
+			group: 'categories.name',
+			order: 'COUNT(articles.id) DESC',
+			limit: '8',
+		),
+	),
+	'Articles per month' => obj (
+		type: 'line',
+		name: 'Articles',
+		data: static::pair (
+			columns: "strftime('%Y-%m', created, 'unixepoch') AS month, COUNT(id)",
+			group: 'month',
+			order: 'month ASC',
+		),
+	),
+	'Latest articles' => obj (
+		type: 'list',
+		data: loop(static::records(order: 'created DESC', limit: 5), fn($a, $id) => tag('a', $a->title, href: "/article/$id", class: 'async')),
+	),
+]
+
 static schema => arr (
-	id:          field (type: 'number',   title: 'ID', list: false, record: false),
-	title:       field (type: 'text',     title: 'Title', length: 160, required: true),
-	cover:       field (type: 'image',    title: 'Cover', list: false),
-	author:      field (type: 'parent',   obj: 'author', title: 'Author', required: true),
-	category:    field (type: 'parent',   obj: 'category', title: 'Category'),
-	topics:      field (type: 'many',     obj: 'topic', table: 'article_topic', title: 'Topics'),
-	status:      field (type: 'select',   title: 'Status', options: ['draft', 'published'], default: 'published'),
-	body:        field (type: 'wysiwyg',  title: 'Body', list: false),
-	comments:    field (type: 'child',    obj: 'comment', title: 'Comments'),
-	created:     field (type: 'datetime', title: 'Published'),
+	id:           field (type: 'number',      title: 'ID', list: false, record: false, create: false, change: false),
+	title:        field (type: 'text',        title: 'Title', length: 160, required: true, search: true),
+	cover:        field (type: 'image',        title: 'Cover', list: false),
+	author:       field (type: 'parent',       obj: 'author', title: 'Author', required: true),
+	category:     field (type: 'parent',       obj: 'category', title: 'Category'),
+	topics:       field (type: 'many',         obj: 'topic', table: 'article_topic', title: 'Topics', create: true, change: true),
+	status:       field (type: 'select',       title: 'Status', options: ['draft', 'published'], default: 'published'),
+	featured:     field (type: 'bool',         title: 'Featured'),
+	audience:     field (type: 'multiselect',  title: 'Audience', options: ['Beginners', 'Intermediate', 'Advanced'], list: false),
+	body:         field (type: 'wysiwyg',      title: 'Body', list: false),
+	wordCount:    field (type: 'virtual',      title: 'Word count', list: false),
+	share_token:  field (type: 'token',        title: 'Share token', list: false),
+	published_at: field (type: 'date',         title: 'Publish date', list: false),
+	comments:     field (type: 'child',        obj: 'comment', title: 'Comments'),
+	attachments:  field (type: 'child',        obj: 'attachment', title: 'Attachments'),
+	created:      field (type: 'datetime',     title: 'Published'),
 )

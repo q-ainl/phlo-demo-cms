@@ -6,16 +6,17 @@ prop trans => %session->trans ?? 'ripple'
 
 // The CMS builds its whole admin (nav, lists, records, REST API) from these
 // two declarations: which models exist, and how they appear in the sidebar.
-prop models => array_values(array_filter(['article', 'author', 'category', 'topic', 'comment'], fn($m) => phlo_exists($m)))
+// attachment is a child of article (managed via /article/{id}/attachments), so it
+// is loaded as a resource but kept out of models[] to avoid a top-level /attachments.
+prop models => array_values(array_filter(['article', 'author', 'category', 'topic', 'comment', 'plan'], fn($m) => phlo_exists($m)))
 prop menu => [
 	'article'  => ['icon' => '📝', 'uri' => 'articles',   'title' => 'Articles'],
 	'author'   => ['icon' => '✍️', 'uri' => 'authors',    'title' => 'Authors'],
 	'category' => ['icon' => '🗂️', 'uri' => 'categories', 'title' => 'Categories'],
 	'topic'    => ['icon' => '🏷️', 'uri' => 'topics',     'title' => 'Topics'],
 	'comment'  => ['icon' => '💬', 'uri' => 'comments',   'title' => 'Comments'],
+	'plan'     => ['icon' => '💳', 'uri' => 'plans',      'title' => 'Plans'],
 ]
-
-route GET => location(slash.'articles')
 
 if (app::route()) return
 return output(['error' => 'not found'], code: 404)

@@ -1,0 +1,34 @@
+@ extends: entity
+
+static table = 'plans'
+static order = 'price ASC'
+
+view: $this->name
+
+static objSorts = [
+	'cheap' => ['title' => 'Price ↑', 'order' => 'price ASC'],
+	'pricy' => ['title' => 'Price ↓', 'order' => 'price DESC'],
+	'name'  => ['title' => 'Name A–Z', 'order' => 'name ASC'],
+]
+
+static objWidgets => [
+	'Price per plan' => obj (
+		type: 'bar',
+		price: true,
+		data: static::pair(columns: 'name, price', order: 'price ASC'),
+	),
+	'Plans by billing' => obj (
+		type: 'pie',
+		data: static::pair(columns: 'interval, COUNT(id)', group: 'interval'),
+	),
+]
+
+static schema => arr (
+	id:       field (type: 'number',   title: 'ID', list: false, record: false, create: false, change: false),
+	name:     field (type: 'text',     title: 'Name', length: 60, required: true, search: true),
+	price:    field (type: 'price',    title: 'Price', suffix: ' /mo'),
+	interval: field (type: 'select',   title: 'Billing', options: ['monthly', 'yearly'], default: 'monthly'),
+	popular:  field (type: 'bool',     title: 'Popular'),
+	active:   field (type: 'bool',     title: 'Active'),
+	created:  field (type: 'datetime', title: 'Created', list: false),
+)

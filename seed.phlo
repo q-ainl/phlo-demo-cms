@@ -4,14 +4,14 @@
 // Run with:  php www/app.php seed::run
 // Re-run safe: it drops and recreates every table first.
 static run($articleCount = 30){
-	foreach (['author', 'category', 'topic', 'article', 'comment'] AS $m) phlo_exists($m)
+	foreach (['author', 'category', 'topic', 'article', 'comment', 'plan', 'attachment'] AS $m) phlo_exists($m)
 	static::schema()
 	if (!class_exists('\\Faker\\Factory')) return 'Faker not installed. Run: composer install -d data/'
 	$faker = \Faker\Factory::create()
 
 	$authorIds = []
 	foreach (range(1, 6) AS $i){
-		author::create(id: $i, name: $faker->name(), email: $faker->safeEmail(), bio: $faker->paragraph(3), created: $faker->dateTimeBetween('-2 years')->getTimestamp())
+		author::create(id: $i, name: $faker->name(), email: $faker->safeEmail(), bio: $faker->paragraph(3), active: $faker->boolean(80) ? 1 : 0, created: $faker->dateTimeBetween('-2 years')->getTimestamp())
 		$authorIds[] = $i
 	}
 
@@ -29,9 +29,15 @@ static run($articleCount = 30){
 		$topicIds[] = $id
 	}
 
+	foreach ([['Free', 0, 'monthly', 0], ['Pro', 9.99, 'monthly', 1], ['Team', 29.99, 'monthly', 0], ['Enterprise', 290, 'yearly', 0]] AS $i => $p){
+		plan::create(id: $i + 1, name: $p[0], price: $p[1], interval: $p[2], popular: $p[3], active: 1, created: time())
+	}
+
 	$pdo = entity::DB()->PDO
 	$articleId = 0
 	$commentId = 0
+	$attachmentId = 0
+	$audiences = ['Beginners', 'Intermediate', 'Advanced']
 	foreach (range(1, $articleCount) AS $n){
 		$articleId++
 		$ts = $faker->dateTimeBetween('-1 year')->getTimestamp()
@@ -41,6 +47,10 @@ static run($articleCount = 30){
 			author: $faker->randomElement($authorIds),
 			category: $faker->randomElement($categoryIds),
 			status: $faker->randomElement(['published', 'published', 'published', 'draft']),
+			featured: $faker->boolean(25) ? 1 : 0,
+			audience: implode(',', (array)$faker->randomElements($audiences, $faker->numberBetween(1, 3))),
+			share_token: token(8),
+			published_at: $faker->dateTimeBetween('@'.$ts)->format('Y-m-d'),
 			body: '<p>'.implode('</p><p>', $faker->paragraphs(4)).'</p>',
 			created: $ts,
 		)
@@ -52,19 +62,25 @@ static run($articleCount = 30){
 			$commentId++
 			comment::create(id: $commentId, article: $articleId, name: $faker->name(), body: $faker->sentence(12), created: $faker->dateTimeBetween('@'.$ts)->getTimestamp())
 		}
+		if ($faker->boolean(30)){
+			$attachmentId++
+			attachment::create(id: $attachmentId, article: $articleId, title: $faker->randomElement(['Spec sheet', 'Press kit', 'Slides', 'Whitepaper']), created: $ts)
+		}
 	}
 
-	return 'Seeded '.count($authorIds).' authors, '.count($categoryIds).' categories, '.count($topicIds).' topics, '.$articleId.' articles, '.$commentId.' comments.'
+	return 'Seeded '.count($authorIds).' authors, '.count($categoryIds).' categories, '.count($topicIds).' topics, 4 plans, '.$articleId.' articles, '.$commentId.' comments, '.$attachmentId.' attachments.'
 }
 
 static schema(){
 	$pdo = entity::DB()->PDO
-	foreach (['comments', 'article_topic', 'articles', 'topics', 'categories', 'authors'] AS $t) $pdo->exec('DROP TABLE IF EXISTS '.$t)
-	$pdo->exec('CREATE TABLE authors (id INTEGER PRIMARY KEY, name TEXT, email TEXT, avatar TEXT, avatar_token TEXT, bio TEXT, created INTEGER)')
+	foreach (['comments', 'article_topic', 'attachments', 'articles', 'topics', 'categories', 'authors', 'plans'] AS $t) $pdo->exec('DROP TABLE IF EXISTS '.$t)
+	$pdo->exec('CREATE TABLE authors (id INTEGER PRIMARY KEY, name TEXT, email TEXT, avatar TEXT, avatar_token TEXT, bio TEXT, active INTEGER, created INTEGER)')
 	$pdo->exec('CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, slug TEXT)')
 	$pdo->exec('CREATE TABLE topics (id INTEGER PRIMARY KEY, name TEXT)')
-	$pdo->exec('CREATE TABLE articles (id INTEGER PRIMARY KEY, title TEXT, cover TEXT, cover_token TEXT, author INTEGER, category INTEGER, status TEXT, body TEXT, created INTEGER)')
+	$pdo->exec('CREATE TABLE articles (id INTEGER PRIMARY KEY, title TEXT, cover TEXT, cover_token TEXT, author INTEGER, category INTEGER, status TEXT, featured INTEGER, audience TEXT, body TEXT, share_token TEXT, published_at TEXT, created INTEGER)')
 	$pdo->exec('CREATE TABLE comments (id INTEGER PRIMARY KEY, article INTEGER, name TEXT, body TEXT, created INTEGER)')
 	$pdo->exec('CREATE TABLE article_topic (article INTEGER, topic INTEGER)')
+	$pdo->exec('CREATE TABLE attachments (id INTEGER PRIMARY KEY, article INTEGER, title TEXT, file TEXT, file_token TEXT, created INTEGER)')
+	$pdo->exec('CREATE TABLE plans (id INTEGER PRIMARY KEY, name TEXT, price REAL, interval TEXT, popular INTEGER, active INTEGER, created INTEGER)')
 	return 'schema created'
 }
