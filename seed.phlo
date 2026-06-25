@@ -1,74 +1,389 @@
 @ type: abstract class
-@ summary: CLI seeder: creates the SQLite tables and fills them with Faker blog data.
+@ summary: CLI seeder: creates the SQLite tables and fills them with a curated English blog dataset plus generated media.
 
 // Run with:  php www/app.php seed::run
-// Re-run safe: it drops and recreates every table first.
-static run($articleCount = 30){
+// Re-run safe: it drops and recreates every table first, and overwrites the media.
+// All data is curated and deterministic: no Faker, no time() randomness, so the
+// committed cms.db + uploads are reproducible by anyone who clones the demo.
+static run(){
 	foreach (['author', 'category', 'topic', 'article', 'comment', 'plan', 'attachment'] AS $m) phlo_exists($m)
 	static::schema()
-	if (!class_exists('\\Faker\\Factory')) return 'Faker not installed. Run: composer install -d data/'
-	$faker = \Faker\Factory::create()
+	$pdo = entity::DB()->PDO
 
+	// A fixed base time so created/published timestamps are deterministic.
+	// 2025-09-01 12:00:00 UTC.
+	$base = 1756728000
+
+	// --- Authors (curated names + one-sentence bios + generated avatars) ---
+	$authors = [
+		['Maya Lindqvist', 'maya.lindqvist@example.com', 'Backend engineer who likes small databases and big ideas.'],
+		['Tomas Reyes', 'tomas.reyes@example.com', 'Frontend developer obsessed with fast, accessible interfaces.'],
+		['Priya Nair', 'priya.nair@example.com', 'Product designer translating messy problems into clean flows.'],
+		['Daniel Okafor', 'daniel.okafor@example.com', 'DevOps lead who automates everything he touches twice.'],
+		['Sofia Bianchi', 'sofia.bianchi@example.com', 'Technical writer turning complex systems into clear stories.'],
+	]
+	$authorPalette = ['#2563eb', '#db2777', '#7c3aed', '#0d9488', '#ea580c']
 	$authorIds = []
-	foreach (range(1, 6) AS $i){
-		author::create(id: $i, name: $faker->name(), email: $faker->safeEmail(), bio: $faker->paragraph(3), active: $faker->boolean(80) ? 1 : 0, created: $faker->dateTimeBetween('-2 years')->getTimestamp())
-		$authorIds[] = $i
-	}
-
-	$categoryIds = []
-	foreach (['Engineering', 'Design', 'Product', 'Culture', 'Tutorials'] AS $i => $name){
+	foreach ($authors AS $i => $a){
 		$id = $i + 1
-		category::create(id: $id, name: $name, slug: strtolower($name))
-		$categoryIds[] = $id
+		$token = token(20)
+		static::avatar($a[0], $authorPalette[$i], $token)
+		author::create(id: $id, name: $a[0], email: $a[1], avatar: 'avatar.png', avatar_token: $token, bio: $a[2], active: 1, created: $base - (400 - $i * 20) * 86400)
+		$authorIds[] = $id
 	}
 
+	// --- Categories (kept from the original seed) ---
+	$categoryColors = [
+		'Engineering' => '#1d4ed8',
+		'Design'      => '#be185d',
+		'Product'     => '#6d28d9',
+		'Culture'     => '#0f766e',
+		'Tutorials'   => '#c2410c',
+	]
+	$categoryIds = []
+	$ci = 0
+	foreach ($categoryColors AS $name => $color){
+		$ci++
+		category::create(id: $ci, name: $name, slug: strtolower($name))
+		$categoryIds[$name] = $ci
+	}
+
+	// --- Topics (~8, kept from the original seed) ---
+	$topicNames = ['phlo', 'php', 'realtime', 'sqlite', 'frontend', 'devops', 'performance', 'opensource']
 	$topicIds = []
-	foreach (['phlo', 'php', 'realtime', 'cms', 'sqlite', 'frontend', 'devops', 'ai', 'opensource', 'performance'] AS $i => $name){
+	foreach ($topicNames AS $i => $name){
 		$id = $i + 1
 		topic::create(id: $id, name: $name)
-		$topicIds[] = $id
+		$topicIds[$name] = $id
 	}
 
-	foreach ([['Free', 0, 'monthly', 0], ['Pro', 9.99, 'monthly', 1], ['Team', 29.99, 'monthly', 0], ['Enterprise', 290, 'yearly', 0]] AS $i => $p){
-		plan::create(id: $i + 1, name: $p[0], price: $p[1], interval: $p[2], popular: $p[3], active: 1, created: time())
+	// --- Plans (4, kept from the original seed) ---
+	$plans = [['Free', 0, 'monthly', 0], ['Pro', 9.99, 'monthly', 1], ['Team', 29.99, 'monthly', 0], ['Enterprise', 290, 'yearly', 0]]
+	foreach ($plans AS $i => $p){
+		plan::create(id: $i + 1, name: $p[0], price: $p[1], interval: $p[2], popular: $p[3], active: 1, created: $base - 365 * 86400)
 	}
 
-	$pdo = entity::DB()->PDO
+	// --- Articles (curated titles + real bodies + cover images) ---
+	// Each row: title, author, category, [topics], status, featured, audience, [paragraphs]
+	$articles = [
+		[
+			'Why we built a CMS on SQLite',
+			1, 'Engineering', ['sqlite', 'phlo', 'performance'], 'published', 1, 'Intermediate,Advanced',
+			['SQLite is often dismissed as a toy database, but for a single-node content site it is close to ideal. The whole dataset lives in one file you can copy, back up, or ship inside a Docker image without a separate server process.',
+			 'Reads are the common case for a CMS, and SQLite serves them straight from the page cache. With write-ahead logging enabled, the occasional editor save never blocks a reader, so the admin stays responsive even under load.',
+			 'The real win is operational simplicity. There is no connection pool to tune, no credentials to rotate, and no second container to keep alive. The demo you are reading runs entirely from one .db file.'],
+		],
+		[
+			'Real-time updates without a message broker',
+			4, 'Engineering', ['realtime', 'phlo', 'devops'], 'published', 1, 'Advanced',
+			['Most real-time tutorials reach for Redis or a dedicated broker before writing a single line of feature code. For a lot of apps that is premature: a single long-lived WebSocket process can fan out events just fine.',
+			 'Phlo bundles its realtime layer into the same daemon that serves HTTP, so a published article can push a notification to connected editors with no extra infrastructure. State stays in one place and deploys stay boring.',
+			 'You can always graduate to a broker once you genuinely outgrow one node. Until then, fewer moving parts means fewer 3am pages.'],
+		],
+		[
+			'Designing forms people actually finish',
+			3, 'Design', ['frontend', 'opensource'], 'published', 0, 'Beginners,Intermediate',
+			['A form is a conversation, and most forms talk too much. Every field you add is another reason for someone to abandon the flow, so the first design pass should be about removal, not layout.',
+			 'Inline validation beats a wall of errors on submit. Telling someone their email looks wrong the moment they leave the field respects their time and keeps the correction cheap.',
+			 'Finally, never make users guess what comes next. A clear primary action and an honest progress hint do more for completion rates than any amount of visual polish.'],
+		],
+		[
+			'A practical guide to PHP 8.4 in production',
+			1, 'Tutorials', ['php', 'performance'], 'published', 0, 'Intermediate',
+			['Each PHP release quietly trims boilerplate, and 8.4 is no exception. Property hooks and asymmetric visibility let you drop a pile of trivial getters and setters without giving up encapsulation.',
+			 'Performance keeps creeping upward too. The JIT and opcache improvements rarely show up in microbenchmarks, but they add up across a busy request path where every millisecond is multiplied by traffic.',
+			 'Upgrading is mostly about reading the deprecation list and fixing it before it becomes a runtime error. Treat deprecations as failures in CI and the actual version bump becomes a non-event.'],
+		],
+		[
+			'Caching strategies that survive a deploy',
+			4, 'Engineering', ['performance', 'devops'], 'published', 0, 'Advanced',
+			['A cache that you cannot invalidate confidently is a liability dressed up as a feature. The hardest bugs in a content site are almost always stale data served long after an editor thought they fixed it.',
+			 'Key your cache on content that actually changes, such as a row version or a last-modified timestamp, rather than on a clock. That way a deploy or a save naturally produces a new key instead of relying on a sweep.',
+			 'Layer your caches deliberately: the database page cache, an application object cache, and an HTTP cache each solve a different problem. Mixing their responsibilities is how you end up debugging ghosts.'],
+		],
+		[
+			'From idea to roadmap in one afternoon',
+			3, 'Product', ['opensource'], 'published', 0, 'Beginners',
+			['Roadmaps fail when they pretend to be promises. Treat the roadmap as a statement of current intent, ordered by confidence, and it stops being a stick people beat you with later.',
+			 'Group work by the outcome it unlocks rather than the feature it ships. Stakeholders argue endlessly about features but tend to agree quickly on outcomes, which makes prioritisation far less political.',
+			 'Revisit it on a fixed cadence so it stays honest. A roadmap that never changes is not a plan, it is a wish written down once and forgotten.'],
+		],
+		[
+			'The case for boring infrastructure',
+			4, 'Culture', ['devops', 'opensource'], 'published', 0, 'Intermediate,Advanced',
+			['New infrastructure is exciting precisely because nobody has been burned by it yet. Boring tools earned their reputation by failing in well-understood, well-documented ways that someone has already solved.',
+			 'Every novel component you add is a new on-call surface and a new thing to explain to the next engineer. The cost is rarely visible on the day you adopt it and very visible the night it breaks.',
+			 'Save your innovation budget for the parts of the product that are actually your edge. Let the database, the queue, and the proxy be aggressively, gloriously dull.'],
+		],
+		[
+			'Building accessible components from scratch',
+			2, 'Tutorials', ['frontend', 'opensource'], 'published', 0, 'Intermediate',
+			['Accessibility is not a layer you add at the end; it is a constraint that makes your components better for everyone. Keyboard support, in particular, forces you to think clearly about focus and state.',
+			 'Reach for native elements before ARIA. A real button and a real label come with behaviour the platform already gets right, while a div pretending to be a button is a maintenance burden you signed up for.',
+			 'Test with a screen reader at least once per component. It is humbling, it is fast, and it catches the gap between markup that validates and markup that is actually usable.'],
+		],
+		[
+			'How we cut our build time in half',
+			1, 'Engineering', ['performance', 'devops', 'php'], 'published', 0, 'Advanced',
+			['Build times rot quietly. Nobody notices the day it crosses from fast to slow, they just gradually stop running the full suite locally and start pushing to let CI find out.',
+			 'We profiled before touching anything and found most of the wall-clock time was spent in steps that rarely changed. Caching those aggressively and only rebuilding what moved did most of the work.',
+			 'The remaining win was parallelism. Once steps were genuinely independent, running them at the same time turned a coffee break back into a glance at the terminal.'],
+		],
+		[
+			'What we are exploring next quarter',
+			5, 'Product', ['phlo', 'realtime'], 'draft', 0, 'Beginners,Intermediate',
+			['This is an early look at the themes we are circling for next quarter, shared while it is still rough enough to change. Nothing here is committed, and that is the point.',
+			 'We are most interested in shrinking the gap between writing content and seeing it live, including richer previews and faster realtime feedback for editors working together.',
+			 'If any of this resonates or worries you, that signal is exactly what we want before the plan hardens. Drafts are cheap; regret is not.'],
+		],
+	]
+
 	$articleId = 0
-	$commentId = 0
-	$attachmentId = 0
-	$audiences = ['Beginners', 'Intermediate', 'Advanced']
-	foreach (range(1, $articleCount) AS $n){
+	$articleMeta = []
+	foreach ($articles AS $a){
 		$articleId++
-		$ts = $faker->dateTimeBetween('-1 year')->getTimestamp()
+		$title = $a[0]
+		$authorId = $a[1]
+		$catName = $a[2]
+		$catId = $categoryIds[$catName]
+		$topicList = $a[3]
+		$status = $a[4]
+		$featured = $a[5]
+		$audience = $a[6]
+		$paras = $a[7]
+		$created = $base - ($articleId - 1) * 5 * 86400
+		$token = token(20)
+		static::cover($title, $categoryColors[$catName], $catName, $token)
+		$body = '<p>'.implode('</p><p>', $paras).'</p>'
 		article::create (
 			id: $articleId,
-			title: rtrim(ucfirst($faker->sentence(6)), '.'),
-			author: $faker->randomElement($authorIds),
-			category: $faker->randomElement($categoryIds),
-			status: $faker->randomElement(['published', 'published', 'published', 'draft']),
-			featured: $faker->boolean(25) ? 1 : 0,
-			audience: implode(',', (array)$faker->randomElements($audiences, $faker->numberBetween(1, 3))),
+			title: $title,
+			cover: 'cover.png',
+			cover_token: $token,
+			author: $authorId,
+			category: $catId,
+			status: $status,
+			featured: $featured,
+			audience: $audience,
 			share_token: token(8),
-			published_at: $faker->dateTimeBetween('@'.$ts)->format('Y-m-d'),
-			body: '<p>'.implode('</p><p>', $faker->paragraphs(4)).'</p>',
-			created: $ts,
+			published_at: date('Y-m-d', $created),
+			body: $body,
+			created: $created,
 		)
-		foreach ((array)$faker->randomElements($topicIds, $faker->numberBetween(1, 3)) AS $tid){
-			$pdo->prepare('INSERT INTO article_topic (article, topic) VALUES (?, ?)')->execute([$articleId, $tid])
+		foreach ($topicList AS $tn){
+			$pdo->prepare('INSERT INTO article_topic (article, topic) VALUES (?, ?)')->execute([$articleId, $topicIds[$tn]])
 		}
-		foreach (range(0, $faker->numberBetween(0, 5)) AS $c){
-			if ($c === 0) continue
+		$articleMeta[$articleId] = ['title' => $title, 'created' => $created]
+	}
+
+	// --- Comments (2-3 per article, curated names + short bodies) ---
+	$commentNames = ['Aria Holt', 'Leo Fischer', 'Nadia Roy', 'Sam Walters', 'Iris Tan', 'Omar Haddad', 'Greta Voss', 'Felix Brun', 'Lena Marsh', 'Cole Adeyemi']
+	$commentBodies = [
+		'This matches what we found in production almost exactly.',
+		'Great write-up, the second point saved me a refactor.',
+		'I disagree slightly, but you made me think. Thanks for sharing.',
+		'Bookmarking this to send to my team on Monday.',
+		'Would love a follow-up that goes deeper on the trade-offs.',
+		'Clear and to the point, exactly the article I needed today.',
+		'We tried the opposite approach and regretted it, so this rings true.',
+		'The example finally made the concept click for me.',
+	]
+	$commentId = 0
+	foreach ($articleMeta AS $aid => $meta){
+		$count = 2 + ($aid % 2)
+		foreach (range(1, $count) AS $k){
 			$commentId++
-			comment::create(id: $commentId, article: $articleId, name: $faker->name(), body: $faker->sentence(12), created: $faker->dateTimeBetween('@'.$ts)->getTimestamp())
-		}
-		if ($faker->boolean(30)){
-			$attachmentId++
-			attachment::create(id: $attachmentId, article: $articleId, title: $faker->randomElement(['Spec sheet', 'Press kit', 'Slides', 'Whitepaper']), created: $ts)
+			$ni = ($aid * 3 + $k) % count($commentNames)
+			$bi = ($aid * 2 + $k) % count($commentBodies)
+			comment::create(id: $commentId, article: $aid, name: $commentNames[$ni], body: $commentBodies[$bi], created: $meta['created'] + $k * 3600)
 		}
 	}
 
-	return 'Seeded '.count($authorIds).' authors, '.count($categoryIds).' categories, '.count($topicIds).' topics, 4 plans, '.$articleId.' articles, '.$commentId.' comments, '.$attachmentId.' attachments.'
+	// --- Attachments (downloadable file on ~4 articles) ---
+	$attachTargets = [
+		1 => 'Spec sheet',
+		2 => 'Release notes',
+		5 => 'Whitepaper',
+		9 => 'Benchmark report',
+	]
+	$attachmentId = 0
+	foreach ($attachTargets AS $aid => $atitle){
+		$attachmentId++
+		$token = token(20)
+		static::document($atitle, $articleMeta[$aid]['title'], $token)
+		attachment::create(id: $attachmentId, article: $aid, title: $atitle, file: 'document.pdf', file_token: $token, created: $articleMeta[$aid]['created'])
+	}
+
+	return 'Seeded '.count($authorIds).' authors, '.count($categoryIds).' categories, '.count($topicIds).' topics, '.count($plans).' plans, '.$articleId.' articles, '.$commentId.' comments, '.$attachmentId.' attachments.'
+}
+
+// Allocate a true-colour canvas with alpha support.
+static canvas($w, $h){
+	$im = imagecreatetruecolor($w, $h)
+	imagealphablending($im, true)
+	imagesavealpha($im, true)
+	return $im
+}
+
+// Parse a #rrggbb colour into an allocated GD colour (no %-format strings).
+static color($im, $hex){
+	$hex = ltrim($hex, '#')
+	$r = hexdec(substr($hex, 0, 2))
+	$g = hexdec(substr($hex, 2, 2))
+	$b = hexdec(substr($hex, 4, 2))
+	return imagecolorallocate($im, $r, $g, $b)
+}
+
+// Save a GD image as PNG to images/<tok0:2>/<tok2:>.png (never imagedestroy).
+static saveImage($im, $dir, $token){
+	$sub = $dir.substr($token, 0, 2)
+	is_dir($sub) || mkdir($sub, 0775, true)
+	$path = $sub.slash.substr($token, 2).'.png'
+	ob_start()
+	imagepng($im, null, 8)
+	$data = ob_get_clean()
+	file_put_contents($path, $data)
+	return $path
+}
+
+// Wrap a title onto multiple lines that fit a max pixel width.
+static wrap($font, $size, $text, $maxWidth){
+	$words = explode(' ', $text)
+	$lines = []
+	$line = ''
+	foreach ($words AS $word){
+		$try = $line === '' ? $word : $line.' '.$word
+		$box = imagettfbbox($size, 0, $font, $try)
+		$width = $box[2] - $box[0]
+		if ($width > $maxWidth && $line !== ''){
+			$lines[] = $line
+			$line = $word
+		}
+		else {
+			$line = $try
+		}
+	}
+	$line === '' || $lines[] = $line
+	return $lines
+}
+
+// Two-letter initials for a name.
+static initials($name){
+	$parts = preg_split('/\s+/', trim($name))
+	$first = mb_substr($parts[0], 0, 1)
+	$last = count($parts) > 1 ? mb_substr($parts[count($parts) - 1], 0, 1) : ''
+	return strtoupper($first.$last)
+}
+
+// 1200x630 cover: solid brand colour + white wrapped title + category tag,
+// plus a matching 64x64 thumb.
+static cover($title, $hex, $category, $token){
+	$font = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+	$im = static::canvas(1200, 630)
+	$bg = static::color($im, $hex)
+	imagefilledrectangle($im, 0, 0, 1200, 630, $bg)
+	$white = imagecolorallocate($im, 255, 255, 255)
+	$tint = imagecolorallocatealpha($im, 255, 255, 255, 100)
+	imagefilledrectangle($im, 0, 0, 1200, 8, $tint)
+	imagefilledrectangle($im, 0, 622, 1200, 630, $tint)
+	$size = 56
+	$lines = static::wrap($font, $size, $title, 980)
+	$lineHeight = 84
+	$total = count($lines) * $lineHeight
+	$y = (int)((630 - $total) / 2) + 58
+	foreach ($lines AS $line){
+		imagettftext($im, $size, 0, 110, $y, $white, $font, $line)
+		$y += $lineHeight
+	}
+	$tagSize = 22
+	imagettftext($im, $tagSize, 0, 112, 96, $tint, $font, strtoupper($category))
+	static::saveImage($im, images, $token)
+
+	$tn = static::canvas(64, 64)
+	$tbg = static::color($tn, $hex)
+	imagefilledrectangle($tn, 0, 0, 64, 64, $tbg)
+	$ini = static::initials($category)
+	$tbox = imagettfbbox(20, 0, $font, $ini)
+	$tw = $tbox[2] - $tbox[0]
+	imagettftext($tn, 20, 0, (int)((64 - $tw) / 2), 42, $white, $font, $ini)
+	static::saveImage($tn, thumbs, $token)
+	return true
+}
+
+// 256x256 avatar: coloured background, white circle, centred initials,
+// plus a 64x64 thumb.
+static avatar($name, $hex, $token){
+	$font = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+	$ini = static::initials($name)
+	$im = static::canvas(256, 256)
+	$bg = static::color($im, $hex)
+	imagefilledrectangle($im, 0, 0, 256, 256, $bg)
+	$ring = imagecolorallocatealpha($im, 255, 255, 255, 110)
+	imagefilledellipse($im, 128, 128, 196, 196, $ring)
+	$white = imagecolorallocate($im, 255, 255, 255)
+	$box = imagettfbbox(86, 0, $font, $ini)
+	$w = $box[2] - $box[0]
+	$h = $box[1] - $box[7]
+	imagettftext($im, 86, 0, (int)((256 - $w) / 2), (int)((256 + $h) / 2), $white, $font, $ini)
+	static::saveImage($im, images, $token)
+
+	$tn = static::canvas(64, 64)
+	$tbg = static::color($tn, $hex)
+	imagefilledrectangle($tn, 0, 0, 64, 64, $tbg)
+	$tbox = imagettfbbox(28, 0, $font, $ini)
+	$tw = $tbox[2] - $tbox[0]
+	$th = $tbox[1] - $tbox[7]
+	imagettftext($tn, 28, 0, (int)((64 - $tw) / 2), (int)((64 + $th) / 2), $white, $font, $ini)
+	static::saveImage($tn, thumbs, $token)
+	return true
+}
+
+// Minimal valid single-page PDF written to files/<tok0:2>/<tok2:>.pdf.
+// No %-format strings: the leading PDF markers are assembled from chr(37).
+static document($label, $articleTitle, $token){
+	$pct = chr(37)
+	$nl = chr(10)
+	$line1 = $label.' for the article '.$articleTitle.'.'
+	$line2 = 'This is a generated sample document for the Phlo CMS demo.'
+	$safe1 = static::pdfEscape($line1)
+	$safe2 = static::pdfEscape($line2)
+
+	$content = 'BT'.$nl.'/F1 18 Tf'.$nl.'72 720 Td'.$nl.'('.static::pdfEscape($label).') Tj'.$nl.'0 -32 Td'.$nl.'/F1 12 Tf'.$nl.'('.$safe1.') Tj'.$nl.'0 -20 Td'.$nl.'('.$safe2.') Tj'.$nl.'ET'
+	$streamLen = strlen($content)
+
+	$objects = []
+	$objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
+	$objects[2] = '<< /Type /Pages /Kids [3 0 R] /Count 1 >>'
+	$objects[3] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>'
+	$objects[4] = '<< /Length '.$streamLen.' >>'.$nl.'stream'.$nl.$content.$nl.'endstream'
+	$objects[5] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+
+	$header = $pct.'PDF-1.4'.$nl
+	$pdf = $header
+	$offsets = []
+	foreach ($objects AS $num => $obj){
+		$offsets[$num] = strlen($pdf)
+		$pdf .= $num.' 0 obj'.$nl.$obj.$nl.'endobj'.$nl
+	}
+	$xrefPos = strlen($pdf)
+	$count = count($objects) + 1
+	$xref = 'xref'.$nl.'0 '.$count.$nl
+	$xref .= '0000000000 65535 f '.$nl
+	foreach ($offsets AS $num => $off){
+		$xref .= str_pad((string)$off, 10, '0', STR_PAD_LEFT).' 00000 n '.$nl
+	}
+	$trailer = 'trailer'.$nl.'<< /Size '.$count.' /Root 1 0 R >>'.$nl.'startxref'.$nl.$xrefPos.$nl.$pct.$pct.'EOF'.$nl
+	$pdf .= $xref.$trailer
+
+	$sub = files.substr($token, 0, 2)
+	is_dir($sub) || mkdir($sub, 0775, true)
+	file_put_contents($sub.slash.substr($token, 2).'.pdf', $pdf)
+	return true
+}
+
+// Escape parentheses and backslashes for a PDF literal string.
+static pdfEscape($text){
+	return strtr($text, ['\\' => '\\\\', '(' => '\\(', ')' => '\\)'])
 }
 
 static schema(){

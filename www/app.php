@@ -6,7 +6,6 @@ phlo_app (
 	build:   true,
 	debug:   true,
 	app:     dirname(__DIR__).'/',
-	composer: dirname(__DIR__).'/data/',
 	files:   dirname(__DIR__).'/data/uploads/files/',
 	images:  dirname(__DIR__).'/data/uploads/images/',
 	thumbs:  dirname(__DIR__).'/data/uploads/thumbs/',
