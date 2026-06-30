@@ -1,0 +1,9 @@
+# Run this demo with Docker; the image bundles the Phlo engine:
+#   docker compose up   ->   http://localhost:8080
+services:
+  app:
+    image: ghcr.io/q-ainl/phlo
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/app

@@ -28,15 +28,22 @@ downloadable attachments. No build or seed step required.
 
 ## Run it
 
+The fastest way is Docker; the image bundles the Phlo engine, so there is nothing
+to install:
+
 ```sh
-# 1. Point www/app.php at your Phlo engine (edit the require path) and set host.
-# 2. Serve www/ (FrankenPHP, php -S, Caddy php_server, ...).
+docker compose up
+# then open http://localhost:8080
 ```
 
 The committed dataset (`data/cms.db` plus the cover/avatar/attachment files under
 `data/uploads/`) is already in place, so the CMS is populated on first load. The
 first HTTP request compiles the `.phlo` sources into `php/` automatically
 (`build: true`).
+
+Prefer to run it without Docker? Serve `www/` with any PHP server (FrankenPHP,
+`php -S`, Caddy `php_server`). `www/app.php` looks for the engine at `/phlo`;
+point it elsewhere with the `PHLO_ENGINE` environment variable.
 
 To regenerate the dataset (it is fully deterministic and has no dependencies):
 

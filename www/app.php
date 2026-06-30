@@ -1,5 +1,5 @@
 <?php
-require('/srv/control/phlo/phlo.php');
+require (getenv('PHLO_ENGINE') ?: '/phlo').'/phlo.php';
 phlo_app (
 	id:      'PhloCMSdemo',
 	host:    'demo.cms.qdev.nl',
