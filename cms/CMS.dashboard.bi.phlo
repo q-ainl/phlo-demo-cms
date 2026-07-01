@@ -1,0 +1,163 @@
+route both GET $list $token {
+	if (str_contains($token, eq)) return false
+	if (!$model = CMS::uriListFind($list)) return false
+	$this->fromBI(token: $token)
+}
+route async POST bi @q {
+	trim(%payload->q) || error('Describe what you are looking for')
+	if (($search = array_filter(loop($this->searches->objData, fn($search, $token) => $search['title'] === %payload->q ? $search : null))) && ($token = key($search))) return $this->fromBI($search[$token], $token)
+	$token = token(input: %payload->q)
+	$res = $this->searches->$token
+	if ($res === null){
+		$parsed = array_filter((array)json_decode(%AI->chat(model: %AI->model, user: $this->prompt(loop(%app->models, fn($model) => "Model: $model\nColumns: ".implode(', ', $this->modelColumns($model)), lf.lf), %payload->q), temperature: 0, response_format: arr(type: 'json_object'))->answer, true))
+		if (!in_array($parsed['model'] ?? null, %app->models, true)) return $this->fail('Could not understand that query')
+		$res = $this->searches->$token = $parsed
+	}
+	$this->pruneCache()
+	$this->fromBI($res, $token)
+}
+
+method pruneCache($max = 200){
+	$data = $this->searches->objData
+	if (count($data) <= $max) return
+	uasort($data, fn($a, $b) => ($a['usage'] ?? 0) <=> ($b['usage'] ?? 0))
+	foreach (array_slice(array_keys($data), 0, count($data) - $max) AS $key) unset($this->searches->$key)
+	$this->searches->objChanged = true
+}
+
+prop searches => %JSON('bi', assoc: true)
+
+method fromBI($res = null, $token = null){
+	$res ??= first($this->searches->$token, $this->searches->$token['usage'] = ($this->searches->$token['usage'] ?? 0) + 1, $this->searches->objChanged = true)
+	$model = $res['model'] ?? null
+	if (!$model || !in_array($model, %app->models)) return $this->fail('Could not understand that query')
+	if (!$model::canView()) return $this->fail('No access to that data')
+	%app->active = $model
+	$title = (string)($res['title'] ?? $model)
+	try {
+		$records = $this->buildQuery($model, $res)
+	} catch (\Throwable $e){
+		# The model was valid but the structure (column/operator) was not; drop it from the cache so the
+		# same deterministic token does not fail forever and is re-asked next time.
+		if ($token && isset($this->searches->$token)){
+			unset($this->searches->$token)
+			$this->searches->objChanged = true
+		}
+		return $this->fail('That query could not be run')
+	}
+	$CMS = CMS($model, 'list', records: $records)
+	$CMS->title = esc($title)
+	main($CMS, $title, path: "$CMS->uri/$token")
+}
+
+# Real (DB-backed) column names of a model, used both to brief the LLM and to validate its choices.
+method modelColumns($model){
+	$cols = []
+	foreach ($model::fields() AS $field) foreach ((array)$field->objColumns AS $col) $cols[$col] = true
+	return array_keys($cols)
+}
+
+# Build a fully parameterized SELECT from the LLM's STRUCTURED filters: every column is validated against the
+# model's real columns and identifier-quoted, every value is a bound (?) parameter, and the operator comes from
+# a closed allowlist. No LLM text ever reaches the SQL string, so injection (UNION etc.) is impossible. An
+# unknown column/operator throws -> fromBI catches -> fail(). Returns model records.
+method buildQuery($model, $res){
+	$valid = array_flip($this->modelColumns($model))
+	$fq = $model::DB()->fieldQuotes
+	$qcol = fn($c) => $fq.str_replace($fq, $fq.$fq, (string)$c).$fq
+	$ops = ['=' => '=', '!=' => '!=', '<>' => '!=', '>' => '>', '>=' => '>=', '<' => '<', '<=' => '<=', 'like' => 'LIKE']
+	$conds = []
+	$binds = []
+	foreach ((array)($res['filters'] ?? []) AS $f){
+		$col = (string)($f['column'] ?? '')
+		isset($valid[$col]) || error("Unknown column: $col")
+		$op = strtolower((string)($f['op'] ?? '='))
+		$qc = $qcol($col)
+		if ($op === 'null') $conds[] = "$qc IS NULL"
+		elseif ($op === 'notnull') $conds[] = "$qc IS NOT NULL"
+		elseif ($op === 'in'){
+			($vals = array_values((array)($f['value'] ?? []))) || error('in needs values')
+			$conds[] = "$qc IN (".implode(comma, array_fill(0, count($vals), qm)).")"
+			array_push($binds, ...$vals)
+		}
+		elseif ($op === 'between'){
+			count($vals = array_slice(array_values((array)($f['value'] ?? [])), 0, 2)) === 2 || error('between needs two values')
+			$conds[] = "$qc BETWEEN ? AND ?"
+			array_push($binds, ...$vals)
+		}
+		elseif (isset($ops[$op])){
+			$conds[] = "$qc $ops[$op] ?"
+			$binds[] = $f['value'] ?? null
+		}
+		else error('Unknown operator')
+	}
+	$table = $fq.$model::$table.$fq
+	$sql = 'SELECT '.$table.dot.$qcol($model::idColumn()).' AS _, '.$table.'.* FROM '.$table
+	$conds && $sql .= ' WHERE '.implode(' AND ', $conds)
+	$order = $res['order'] ?? null
+	$oc = $order ? (string)($order['column'] ?? '') : ''
+	if ($oc !== '' && isset($valid[$oc])){
+		$dir = strtoupper((string)($order['dir'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC'
+		$sql .= ' ORDER BY '.$qcol($oc).space.$dir
+	}
+	$sql .= ' LIMIT '.min(500, max(1, (int)($res['limit'] ?? 100)))
+	return $model::DB()->query($sql, ...$binds)->fetchAll(\PDO::FETCH_CLASS|\PDO::FETCH_UNIQUE, $model)
+}
+
+method fail($message) => %req->async ? apply(error: $message) : main(tag('section', tag('h1', 'Search failed').tag('p', esc($message).dot)), 'Search failed')
+
+view:
+<form#bi.async action=/bi method=post autocomplete=off>
+	<button#speak.icon.microphone type=button autofocus/>
+	<input.field.full type=text name=q list=searches placeholder="Describe what you want to know">
+	{{ $this->datalist }}
+	<button>&gt;</button>
+</form>
+
+view datalist {
+	$searches = array_filter($this->searches->objData, fn($s) => in_array($s['model'] ?? '', %app->models, true))
+	uasort($searches, fn($a, $b) => ($b['usage'] ?? 0) <=> ($a['usage'] ?? 0))
+	$options = loop($searches, fn($search, $token) => tag('option', value: $search['title'], data_uri: ($search['model']::$uriList ?? $search['model']::$table).slash.$token), lf)
+	return tag('datalist', id: 'searches', inner: indentView("\n$options\n"))
+}
+
+view prompt($struct, $q):
+You translate a natural-language question into a structured database query. Do not write SQL.
+Return only a JSON object with these keys:
+-title: a short title describing the search
+-model: the singular model name, chosen from the list below
+-filters: an array of objects, each with "column" (a column of the chosen model), "op" (one of: = != > >= < <= like in between null notnull) and "value" (the value; use an array for in and between; omit for null and notnull)
+-order: optional, an object with "column" (a column) and "dir" ("asc" or "desc")
+-limit: optional integer, at most 500
+Use only the columns listed for the chosen model. Never invent columns and never return SQL.
+Question:
+--
+$q
+--
+Models and their columns:
+$struct
+It is currently {{ date('j-n-Y H:i') }}.
+
+<script>
+const recognition = window.webkitSpeechRecognition ? new webkitSpeechRecognition : null
+if (recognition){
+	recognition.lang = obj('html').lang+'-'+obj('html').lang.toUpperCase()
+	recognition.interimResults = true
+	recognition.onresult = e => obj('#bi input').value = Array.from(e.results).map(result => result[0].transcript).join('')
+	recognition.onend = e => obj('#bi input').value && obj('#bi').requestSubmit()
+}
+else app.mod.delete('#speak')
+on('click', '#speak', () => recognition.start())
+on('click', '#bi input', input => input.value = '')
+on('change', '#bi input', input => (index = Array.from(searches.options).map(opt => opt.value).indexOf(input.value)) >= 0 && app.get(searches.options[index].dataset.uri))
+</script>
+
+<style>
+form#bi {
+	background: $surface
+	border-radius: 9px
+	display: flex
+	margin: 1rem 0
+	i: cursor: pointer
+}
+</style>
