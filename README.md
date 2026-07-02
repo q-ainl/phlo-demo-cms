@@ -35,7 +35,7 @@ to install:
 
 ```sh
 docker compose up
-# then open http://localhost:8080
+# then open http://localhost
 ```
 
 The committed dataset (`data/cms.db` plus the cover/avatar/attachment files under
