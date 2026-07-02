@@ -1,6 +1,6 @@
 # Phlo CMS demo - a blog on SQLite
 
-A small but complete blog/magazine running on the **Phlo CMS**. The whole admin
+A small but complete blog/magazine running on [Phlo CMS](https://github.com/q-ainl/phlo-cms). The whole admin
 (navigation, list views, record views, create/edit forms, a REST API and CSRF
 protection) is generated from a handful of schema declarations. Nothing here is
 hand-built HTML for the admin.
@@ -8,6 +8,8 @@ hand-built HTML for the admin.
 The repo ships with a **ready-made dataset**: clone it and you immediately have a
 populated CMS - articles, authors, comments, and real cover images, avatars and
 downloadable attachments. No build or seed step required.
+
+![The generated admin: a populated list view with relations, comments and attachments](.github/admin.png)
 
 ## What it shows
 
