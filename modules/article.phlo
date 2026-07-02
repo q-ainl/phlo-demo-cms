@@ -16,7 +16,7 @@ static objFilters = [
 static objSorts = [
 	'newest' => ['title' => 'Newest',    'order' => 'created DESC'],
 	'oldest' => ['title' => 'Oldest',    'order' => 'created ASC'],
-	'title'  => ['title' => 'Title A–Z', 'order' => 'title ASC'],
+	'title'  => ['title' => 'Title A-Z', 'order' => 'title ASC'],
 ]
 
 static objWidgets => [

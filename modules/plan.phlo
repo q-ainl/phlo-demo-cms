@@ -8,7 +8,7 @@ view: $this->name
 static objSorts = [
 	'cheap' => ['title' => 'Price ↑', 'order' => 'price ASC'],
 	'pricy' => ['title' => 'Price ↓', 'order' => 'price DESC'],
-	'name'  => ['title' => 'Name A–Z', 'order' => 'name ASC'],
+	'name'  => ['title' => 'Name A-Z', 'order' => 'name ASC'],
 ]
 
 static objWidgets => [
