@@ -4,6 +4,6 @@ services:
   app:
     image: ghcr.io/q-ainl/phlo
     ports:
-      - "80:80"
+      - "${PORT:-80}:80"
     volumes:
       - .:/app

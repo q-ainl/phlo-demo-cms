@@ -38,6 +38,8 @@ docker compose up
 # then open http://localhost
 ```
 
+Port taken, or running a second demo next to this one? Pick any port: `PORT=8081 docker compose up` and open http://localhost:8081.
+
 The committed dataset (`data/cms.db` plus the cover/avatar/attachment files under
 `data/uploads/`) is already in place, so the CMS is populated on first load. The
 first HTTP request compiles the `.phlo` sources into `php/` automatically
