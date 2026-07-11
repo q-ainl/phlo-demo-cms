@@ -1,0 +1,26 @@
+{
+    "name": "phlo/demo-cms",
+    "description": "A small but complete blog on Phlo CMS: schema-driven admin, REST API and a committed SQLite dataset.",
+    "type": "project",
+    "license": "MIT",
+    "keywords": ["phlo", "cms", "demo", "blog", "sqlite"],
+    "homepage": "https://github.com/q-ainl/phlo-demo-cms",
+    "authors": [
+        {
+            "name": "Jordi Boerman",
+            "email": "j@rdi.nu"
+        }
+    ],
+    "require": {
+        "php": ">=8.3",
+        "ext-gd": "*",
+        "ext-pdo_sqlite": "*",
+        "phlo/cms": "^1.0",
+        "phlo/tech": "^1.0"
+    },
+    "minimum-stability": "RC",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true
+    }
+}

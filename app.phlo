@@ -18,6 +18,9 @@ prop menu => [
 	'plan'     => ['icon' => '💳', 'uri' => 'plans',      'title' => 'Plans'],
 ]
 
+// Guarded en() so the CMS chrome renders without lang.phlo; a loaded lang.phlo defines en() first and wins.
+if (!function_exists('en')) { function en($t, ...$a){ return $a ? sprintf($t, ...$a) : $t; } }
+
 if (app::route()) return
 return output(['error' => 'not found'], code: 404)
 

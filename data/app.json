@@ -88,9 +88,9 @@
     ],
     "paths": {
         "resources": [
-            "%app/cms/",
+            "%app/vendor/phlo/cms/",
             "%app/modules/"
         ]
     },
-    "icons": "%app/cms/icons/"
+    "icons": "%app/vendor/phlo/cms/icons/"
 }

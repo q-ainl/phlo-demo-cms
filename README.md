@@ -30,10 +30,11 @@ downloadable attachments. No build or seed step required.
 
 ## Run it
 
-The fastest way is Docker; the image bundles the Phlo engine, so there is nothing
-to install:
+The CMS comes in as a Composer dependency; the Docker image bundles the Phlo
+engine, so that is all there is to install:
 
 ```sh
+composer install
 docker compose up
 # then open http://localhost
 ```
@@ -46,8 +47,9 @@ first HTTP request transpiles the `.phlo` sources into `php/` automatically
 (`build: true`).
 
 Prefer to run it without Docker? Serve `www/` with any PHP server (FrankenPHP,
-`php -S`, Caddy `php_server`). `www/app.php` looks for the engine at `/phlo`;
-point it elsewhere with the `PHLO_ENGINE` environment variable.
+`php -S`, Caddy `php_server`). `www/app.php` uses the Composer-installed engine
+(`vendor/phlo/tech`) when present, and otherwise looks for it at `/phlo`; point
+it elsewhere with the `PHLO_ENGINE` environment variable.
 
 To regenerate the dataset (it is fully deterministic and has no dependencies):
 
@@ -68,6 +70,7 @@ seed.phlo           # curated, deterministic seeder (regenerates cms.db + media)
 data/cms.db         # the committed SQLite dataset
 data/uploads/       # committed cover images, avatars and attachment files
 data/app.json       # wires the CMS resources, fields and SQLite driver
+composer.json       # the CMS itself: phlo/cms, installed into vendor/
 www/app.php         # the entry point (host, paths, build flags)
 ```
 
