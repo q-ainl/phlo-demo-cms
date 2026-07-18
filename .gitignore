@@ -9,6 +9,7 @@ data/errors.json
 
 # Local creds / env (never commit)
 creds.ini
+auth.ini
 .env
 
 # Composer (vendor/phlo/* may be local symlinks during development)
